@@ -20,6 +20,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   callbacks: {
+    async signIn({ user, account }) {
+      // Explicitly allow all OAuth sign-ins; credentials are handled by authorize()
+      if (account?.provider === "google") {
+        return !!user.id
+      }
+      return true
+    },
     async jwt({ token, user, account }) {
       // Runs on initial sign-in (credentials or Google)
       if (user) {

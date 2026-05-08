@@ -11,6 +11,12 @@ const DEFAULT_LOGIN_REDIRECT = "/dashboard"
 
 export default auth((req) => {
   const { nextUrl } = req
+
+  // NextAuth callback routes must never be intercepted — session cookie is
+  // being set at this point and req.auth is not yet valid here
+  const isApiAuthRoute = nextUrl.pathname.startsWith("/api/auth")
+  if (isApiAuthRoute) return NextResponse.next()
+
   const isLoggedIn = !!req.auth
   const isOnboardingComplete = req.auth?.user?.onboardingComplete ?? false
 
@@ -19,7 +25,7 @@ export default auth((req) => {
   const isOnboardingRoute = nextUrl.pathname === ONBOARDING_ROUTE
   const isApiRoute = nextUrl.pathname.startsWith("/api")
 
-  // Always allow API routes through
+  // Allow other API routes through
   if (isApiRoute) return NextResponse.next()
 
   // Redirect logged-in users away from auth pages

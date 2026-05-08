@@ -60,7 +60,7 @@ function LoginForm() {
         type="button"
         onClick={async () => {
           setIsLoading(true)
-          await signIn("google", { callbackUrl: "/dashboard" })
+          await signIn("google", { callbackUrl: "/dashboard", redirect: true })
         }}
         disabled={isLoading}
         className="w-full flex items-center justify-center gap-3

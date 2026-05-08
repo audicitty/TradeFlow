@@ -92,7 +92,7 @@ export default function SignupPage() {
             type="button"
             onClick={async () => {
               setIsLoading(true)
-              await signIn("google", { callbackUrl: "/onboarding" })
+              await signIn("google", { callbackUrl: "/onboarding", redirect: true })
             }}
             disabled={isLoading}
             className="w-full flex items-center justify-center gap-3
