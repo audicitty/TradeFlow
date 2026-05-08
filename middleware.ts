@@ -35,6 +35,12 @@ export default auth((req) => {
     return NextResponse.redirect(new URL(DEFAULT_LOGIN_REDIRECT, nextUrl))
   }
 
+  // Redirect logged-in users who haven't completed onboarding to onboarding
+  // Handles Google OAuth users who land on /dashboard before completing setup
+  if (isLoggedIn && !isOnboardingComplete && !isOnboardingRoute && !isAuthRoute) {
+    return NextResponse.redirect(new URL(ONBOARDING_ROUTE, nextUrl))
+  }
+
   // Redirect unauthenticated users away from protected routes
   if (!isLoggedIn && !isPublicRoute && !isOnboardingRoute) {
     const loginUrl = new URL("/login", nextUrl)

@@ -1,6 +1,7 @@
 import NextAuth from "next-auth"
 import { PrismaAdapter } from "@auth/prisma-adapter"
 import Credentials from "next-auth/providers/credentials"
+import Google from "next-auth/providers/google"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { z } from "zod"
@@ -18,7 +19,53 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
+  callbacks: {
+    async jwt({ token, user, account }) {
+      // Runs on initial sign-in (credentials or Google)
+      if (user) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: user.id as string },
+          include: { portfolio: true },
+        })
+        return {
+          ...token,
+          id: user.id as string,
+          avatar: dbUser?.avatar ?? "avatar_1",
+          onboardingComplete: !!dbUser?.portfolio,
+        }
+      }
+
+      // Runs on subsequent Google re-authentication to refresh onboarding status
+      if (account?.provider === "google") {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.id },
+          include: { portfolio: true },
+        })
+        if (dbUser) {
+          return {
+            ...token,
+            avatar: dbUser.avatar ?? token.avatar ?? "avatar_1",
+            onboardingComplete: !!dbUser.portfolio,
+          }
+        }
+      }
+
+      return token
+    },
+    async session({ session, token }) {
+      if (token && session.user) {
+        session.user.id = token.id as string
+        session.user.avatar = token.avatar as string
+        session.user.onboardingComplete = token.onboardingComplete as boolean
+      }
+      return session
+    },
+  },
   providers: [
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    }),
     Credentials({
       name: "credentials",
       credentials: {
@@ -54,9 +101,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   events: {
-    async signIn({ user, isNewUser }) {
-      if (isNewUser) {
-        console.log(`New user registered: ${user.email}`)
+    async signIn({ user, account, isNewUser }) {
+      // Ensure new Google users get a default avatar (PrismaAdapter sets DB default,
+      // but this guarantees the field is explicitly written)
+      if (account?.provider === "google" && isNewUser) {
+        await prisma.user.update({
+          where: { id: user.id as string },
+          data: { avatar: "avatar_1" },
+        })
       }
     },
   },
