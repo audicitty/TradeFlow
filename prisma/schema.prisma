@@ -1,0 +1,220 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id             String              @id @default(cuid())
+  email          String              @unique
+  name           String
+  avatar         String              @default("avatar_1")
+  password       String?
+  emailVerified  DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  aiCallCount    AICallCount?
+  accounts       Account[]
+  dailyInsights  DailyInsight[]
+  journalEntries JournalEntry[]
+  orders         Order[]
+  portfolio      Portfolio?
+  snapshots      PortfolioSnapshot[]
+  priceAlerts    PriceAlert[]
+  sessions       Session[]
+  streak         Streak?
+  badges         UserBadge[]
+  watchlistItems WatchlistItem[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Portfolio {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  cashBalance     Decimal   @default(10000) @db.Decimal(12, 2)
+  startingBalance Decimal   @default(10000) @db.Decimal(12, 2)
+  resetCount      Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  holdings        Holding[]
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Holding {
+  id          String    @id @default(cuid())
+  portfolioId String
+  symbol      String
+  exchange    String
+  companyName String
+  quantity    Int
+  avgBuyPrice Decimal   @db.Decimal(12, 2)
+  sector      String    @default("Unknown")
+  marketCap   String    @default("LARGECAP")
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@unique([portfolioId, symbol, exchange])
+}
+
+model Order {
+  id              String        @id @default(cuid())
+  userId          String
+  symbol          String
+  exchange        String
+  companyName     String
+  orderType       String
+  side            String
+  quantity        Int
+  limitPrice      Decimal?      @db.Decimal(12, 2)
+  executedPrice   Decimal?      @db.Decimal(12, 2)
+  status          String        @default("PENDING")
+  brokerage       Decimal       @default(0) @db.Decimal(10, 2)
+  stt             Decimal       @default(0) @db.Decimal(10, 2)
+  exchangeCharges Decimal       @default(0) @db.Decimal(10, 4)
+  sebiCharges     Decimal       @default(0) @db.Decimal(10, 4)
+  gst             Decimal       @default(0) @db.Decimal(10, 2)
+  stampDuty       Decimal       @default(0) @db.Decimal(10, 2)
+  totalCharges    Decimal       @default(0) @db.Decimal(10, 2)
+  realizedPnl     Decimal?      @db.Decimal(12, 2)
+  createdAt       DateTime      @default(now())
+  executedAt      DateTime?
+  journalEntryId  String?       @unique
+  journalEntry    JournalEntry? @relation(fields: [journalEntryId], references: [id])
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model JournalEntry {
+  id           String    @id @default(cuid())
+  userId       String
+  symbol       String
+  companyName  String
+  entryNote    String?
+  exitNote     String?
+  thesis       String?
+  thesisResult String?
+  aiDebrief    String?
+  createdAt    DateTime  @default(now())
+  closedAt     DateTime?
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order        Order?
+}
+
+model WatchlistItem {
+  id          String   @id @default(cuid())
+  userId      String
+  symbol      String
+  exchange    String
+  companyName String
+  addedAt     DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, symbol, exchange])
+}
+
+model PriceAlert {
+  id          String   @id @default(cuid())
+  userId      String
+  symbol      String
+  exchange    String
+  companyName String
+  targetPrice Decimal  @db.Decimal(12, 2)
+  direction   String
+  triggered   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Streak {
+  id             String    @id @default(cuid())
+  userId         String    @unique
+  currentStreak  Int       @default(0)
+  longestStreak  Int       @default(0)
+  lastActiveDate DateTime?
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserBadge {
+  id       String   @id @default(cuid())
+  userId   String
+  badgeId  String
+  earnedAt DateTime @default(now())
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+}
+
+model DailyInsight {
+  id            String   @id @default(cuid())
+  userId        String
+  insight       String
+  generatedDate String
+  createdAt     DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, generatedDate])
+}
+
+model AICallCount {
+  id        String @id @default(cuid())
+  userId    String @unique
+  count     Int    @default(0)
+  resetDate String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EarningsEvent {
+  id          String   @id @default(cuid())
+  symbol      String
+  exchange    String
+  companyName String
+  reportDate  DateTime
+  createdAt   DateTime @default(now())
+
+  @@unique([symbol, exchange, reportDate])
+}
+
+model PortfolioSnapshot {
+  id             String   @id @default(cuid())
+  userId         String
+  portfolioValue Decimal  @db.Decimal(12, 2)
+  cashBalance    Decimal  @db.Decimal(12, 2)
+  snapshotDate   String
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, snapshotDate])
+}
