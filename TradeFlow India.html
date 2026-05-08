@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=1440"/>
+<title>TradeFlow India — Paper Trading</title>
+<link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script src="data.js"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="shell.jsx"></script>
+<script type="text/babel" src="dashboard.jsx"></script>
+<script type="text/babel" src="markets.jsx"></script>
+<script type="text/babel" src="portfolio.jsx"></script>
+<script type="text/babel" src="journal.jsx"></script>
+<script type="text/babel" src="misc.jsx"></script>
+<script type="text/babel" src="modals.jsx"></script>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const ACCENT_OPTS = {
+  green: { accent: "#00D09C", line: "rgba(0,208,156,0.32)", soft: "rgba(0,208,156,0.12)", dark: "#021810" },
+  blue:  { accent: "#3B82F6", line: "rgba(59,130,246,0.36)", soft: "rgba(59,130,246,0.14)", dark: "#06122e" },
+  amber: { accent: "#F5A623", line: "rgba(245,166,35,0.36)", soft: "rgba(245,166,35,0.14)", dark: "#241500" },
+};
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accent": "blue"
+}/*EDITMODE-END*/;
+
+function App() {
+  const [active, setActive] = useState("dashboard");
+  const [stockDetail, setStockDetail] = useState(null);
+  const [orderModal, setOrderModal] = useState(null);
+  const [alertModal, setAlertModal] = useState(null);
+  const [resetModal, setResetModal] = useState(false);
+  const [watchlist, setWatchlist] = useState(window.WATCHLIST);
+  const [cash, setCash] = useState(window.USER.cash);
+  const [holdings, setHoldings] = useState(window.HOLDINGS);
+  const [toasts, setToasts] = useState([]);
+  const [tweaks, setTweak] = window.useTweaks(TWEAK_DEFAULTS);
+
+  useEffect(() => {
+    const opt = ACCENT_OPTS[tweaks.accent] || ACCENT_OPTS.green;
+    document.documentElement.style.setProperty("--accent", opt.accent);
+    document.documentElement.style.setProperty("--accent-line", opt.line);
+    document.documentElement.style.setProperty("--accent-soft", opt.soft);
+  }, [tweaks.accent]);
+
+  // Sync cash + holdings to global so subcomponents read fresh
+  useEffect(() => { window.USER.cash = cash; }, [cash]);
+  useEffect(() => { window.HOLDINGS = holdings; }, [holdings]);
+
+  const pushToast = (t) => {
+    const id = Math.random().toString(36).slice(2);
+    setToasts(ts => [...ts, { ...t, id }]);
+    setTimeout(() => setToasts(ts => ts.filter(x => x.id !== id)), 3800);
+  };
+
+  const toggleWatch = (sym) => {
+    setWatchlist(w => w.includes(sym) ? w.filter(x => x !== sym) : [...w, sym]);
+    pushToast({ kind: "info", text: watchlist.includes(sym) ? `Removed ${sym} from watchlist` : `Added ${sym} to watchlist` });
+  };
+
+  const openOrder = (ctx) => setOrderModal(ctx);
+
+  const placeOrder = (o) => {
+    // Update cash + holdings live
+    if (o.side === "BUY") {
+      setCash(c => c - o.net);
+      setHoldings(hs => {
+        const ex = hs.find(h => h.sym === o.sym);
+        if (ex) {
+          const newQty = ex.qty + o.qty;
+          const newAvg = ((ex.qty * ex.avg) + (o.qty * o.price)) / newQty;
+          return hs.map(h => h.sym === o.sym ? { ...h, qty: newQty, avg: newAvg } : h);
+        }
+        return [...hs, { sym: o.sym, qty: o.qty, avg: o.price, buyDate: "2026-05-06", note: o.journal?.entryNote || "" }];
+      });
+    } else {
+      setCash(c => c + o.net);
+      setHoldings(hs => hs.map(h => h.sym === o.sym ? { ...h, qty: h.qty - o.qty } : h).filter(h => h.qty > 0));
+    }
+    setOrderModal(null);
+    pushToast({ kind: "success", text: `${o.side} order placed · ${o.qty} ${o.sym} @ ₹${window.fmt(o.price)}` });
+  };
+
+  const setAlert = ({ sym, direction, target }) => {
+    setAlertModal(null);
+    pushToast({ kind: "info", text: `Alert set · ${sym} ${direction} ₹${target}` });
+  };
+
+  const openDetail = (sym) => { setStockDetail(sym); setActive("markets"); };
+
+  return (
+    <div className="app">
+      <window.Sidebar active={active} setActive={(a) => { setActive(a); setStockDetail(null); }}/>
+      <div className="main">
+        <window.Topbar marketOpen={true} cash={cash} onSearch={() => setActive("markets")} onAlert={() => pushToast({ kind: "info", text: "🔔 ZOMATO hit your target of ₹268.00" })}/>
+        <div className="scroll">
+          {stockDetail && <window.StockDetail sym={stockDetail} onBack={() => setStockDetail(null)} openOrder={openOrder} openAlert={(s) => setAlertModal(s)} watchlist={watchlist} toggleWatch={toggleWatch}/>}
+          {!stockDetail && active === "dashboard" && <window.Dashboard openOrder={openOrder} openAlert={(s) => setAlertModal(s)} setActive={setActive}/>}
+          {!stockDetail && active === "markets" && <window.Markets openOrder={openOrder} openDetail={openDetail}/>}
+          {!stockDetail && active === "portfolio" && <window.Portfolio openOrder={openOrder} openDetail={openDetail}/>}
+          {!stockDetail && active === "journal" && <window.Journal/>}
+          {!stockDetail && active === "challenges" && <window.Challenges/>}
+          {!stockDetail && active === "watchlist" && <window.Watchlist watchlist={watchlist} toggleWatch={toggleWatch} openOrder={openOrder} openAlert={(s) => setAlertModal(s)} openDetail={openDetail}/>}
+          {!stockDetail && active === "leaderboard" && <window.Leaderboard/>}
+          {!stockDetail && active === "settings" && <window.Settings openReset={() => setResetModal(true)}/>}
+        </div>
+      </div>
+
+      {orderModal && <window.OrderModal ctx={orderModal} onClose={() => setOrderModal(null)} onPlace={placeOrder}/>}
+      {alertModal && <window.AlertModal sym={alertModal} onClose={() => setAlertModal(null)} onSet={setAlert}/>}
+      {resetModal && <ResetModal onClose={() => setResetModal(false)} onConfirm={() => { setCash(10000); setHoldings([]); setResetModal(false); pushToast({ kind: "warn", text: "Portfolio reset · Cash restored to ₹10,000" }); }}/>}
+
+      <div className="toast-host">
+        {toasts.map(t => (
+          <div key={t.id} className={"toast " + t.kind}>
+            <div className="toast-icon">
+              {t.kind === "success" ? "✓" : t.kind === "warn" ? "!" : "i"}
+            </div>
+            <div>{t.text}</div>
+          </div>
+        ))}
+      </div>
+
+      <window.TweaksPanel title="Tweaks">
+        <window.TweakSection label="Accent">
+          <window.TweakRadio
+            label="Color"
+            value={tweaks.accent}
+            options={["green", "blue", "amber"]}
+            onChange={(v) => setTweak("accent", v)}
+          />
+        </window.TweakSection>
+      </window.TweaksPanel>
+    </div>
+  );
+}
+
+function ResetModal({ onClose, onConfirm }) {
+  const [text, setText] = useState("");
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ width: 440 }}>
+        <div style={{ padding: 22 }}>
+          <div className="sora" style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Reset portfolio?</div>
+          <div className="muted" style={{ fontSize: 13, lineHeight: 1.55, marginBottom: 16 }}>
+            This will reset cash to ₹10,000 and permanently delete all holdings, orders, and journal entries. Badges and streaks are preserved. <strong style={{ color: "var(--danger)" }}>This cannot be undone.</strong>
+          </div>
+          <div className="field-label">Type RESET to confirm</div>
+          <input className="input mono" value={text} onChange={e => setText(e.target.value)} autoFocus/>
+          <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+            <button className="btn" onClick={onClose} style={{ flex: 1 }}>Cancel</button>
+            <button className="btn danger" disabled={text !== "RESET"} onClick={onConfirm} style={{ flex: 2 }}>Reset portfolio</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
